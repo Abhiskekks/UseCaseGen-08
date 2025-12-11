@@ -88,7 +88,7 @@ def find_best_answer(query, df):
     # --- UPDATED FORMATTING SECTION: Use Markdown Table ---
     # The keys in the table are the labels, and the values are the data.
     formatted_answer = (
-        f"### 08 code Mapping Details\n\n"
+        f"### 08 code Details\n\n"
         f"| Item | Value |\n"
         f"| :--- | :--- |\n"
         f"| **Access Code** | `{best_match_data['Access Code']}` |\n"
