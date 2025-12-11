@@ -8,7 +8,7 @@ import re
 
 # --- Configuration ---
 # 1. Specify the name of your EXCEL file 
-CSV_FILE_NAME = 'knowledge_base.xlsx' 
+CSV_FILE_NAME = 'knowledge_base_file.xlsx' 
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
