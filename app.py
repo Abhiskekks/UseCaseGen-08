@@ -91,7 +91,7 @@ def find_best_answer(query, df):
         f"### 08 code Details\n\n"
         f"| Item | Value |\n"
         f"| :--- | :--- |\n"
-        f"| **Access Code** | `{best_match_data['Access Code']}` |\n"
+        f"| **08 Code** | `{best_match_data['Access Code']}` |\n"
         f"| **Setting Item Name** | {best_match_data['Setting item name']} |\n"
         f"| **Sub Code** | `{best_match_data['Sub Code']}` |\n"
         f"| **Meaning of Sub Code** | {best_match_data['Meaning of sub code']} |\n"
