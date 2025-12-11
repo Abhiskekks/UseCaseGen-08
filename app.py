@@ -1,4 +1,4 @@
-# app.py - Updated for Access Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT
+# app.py - Updated for Access Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT (ERROR FIX APPLIED)
 
 import streamlit as st
 import pandas as pd
@@ -184,6 +184,25 @@ if data_df is not None:
 
                 else:
                     # Handle "Not Found" case
+                    
+                    # If it was JUST a greeting (e.g., input was only "Hi"), add a helpful prompt
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
-                            final_response +=
+                            # Line 188 (approximately): Added the text to the same line as the +=
+                            final_response += " I'm ready to search my knowledge base. What Access Code can I look up for you?"
+                        else:
+                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific Access Code!"
+
+                    elif greeting_response:
+                        final_response += f" {CSV_NOT_FOUND_SNIPPET}"
+
+                    else:
+                        final_response = CSV_NOT_FOUND_SNIPPET
+
+                st.markdown(final_response)
+
+        # Add assistant message to chat history
+        st.session_state.messages.append({"role": "assistant", "content": final_response})
+
+    st.sidebar.subheader("Configuration")
+    st.sidebar.info(f"Using **{CSV_FILE_NAME}** as the knowledge base. \n\nMinimum match score: **{MIN_MATCH_SCORE}%**")
