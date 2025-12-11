@@ -135,7 +135,7 @@ def analyze_prompt_for_multiple_intents(prompt):
 data_df = load_data(CSV_FILE_NAME)
 
 if data_df is not None:
-    st.set_page_config(page_title="Access Code Mapper Chatbot", layout="centered")
+    st.set_page_config(page_title="UseCaseGen-08", layout="centered")
     st.title(" 🚀 Access Code Mapper ")
     st.markdown("Try saying **'Hi, I need the details for access code XXX'** or a query related to your Access Codes.")
 
