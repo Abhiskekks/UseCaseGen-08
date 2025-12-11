@@ -1,4 +1,5 @@
 # app.py - Updated for Dual-Field Search (Access Code OR Setting Item Name)
+# NOW USING EXCEL (.xlsx or .xls) FILE INPUT and REMOVING BEST MATCH SCORE DISPLAY
 
 import streamlit as st
 import pandas as pd
@@ -7,8 +8,8 @@ import random
 import re
 
 # --- Configuration ---
-# 1. Specify the name of your CSV file
-CSV_FILE_NAME = 'knowledge_base.csv'
+# 1. Specify the name of your EXCEL file (Make sure your file is now an Excel file, e.g., knowledge_base.xlsx)
+CSV_FILE_NAME = 'knowledge_base.xlsx' # Changed expected file extension for clarity/best practice
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
@@ -38,9 +39,13 @@ REQUIRED_COLUMNS = [
 # --- Core Functions ---
 
 def load_data(file_path):
-    """Loads the CSV file into a Pandas DataFrame."""
+    """Loads the Excel file into a Pandas DataFrame."""
     try:
-        df = pd.read_csv(file_path)
+        # --- MAJOR CHANGE HERE: Using pd.read_excel() ---
+        # Assuming the data is in the first sheet (sheet_name=0 is default)
+        df = pd.read_excel(file_path)
+        # ------------------------------------------------
+        
         # CHECK: Ensure all new required columns are present
         if not all(col in df.columns for col in REQUIRED_COLUMNS):
             missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -48,10 +53,11 @@ def load_data(file_path):
             return None
         return df
     except FileNotFoundError:
-        st.error(f"Error: The file '{file_path}' was not found. Please create it and restart.")
+        st.error(f"Error: The file '{file_path}' was not found. Please ensure it is an Excel file (.xlsx or .xls) and correctly named.")
         return None
     except Exception as e:
-        st.error(f"An error occurred while loading the CSV: {e}")
+        st.error(f"An error occurred while loading the Excel file: {e}")
+        st.info("Make sure you have the 'openpyxl' or 'xlrd' library installed if you encounter an error here. You may need to add it to requirements.txt.")
         return None
 
 def find_best_answer(query, df):
@@ -63,11 +69,9 @@ def find_best_answer(query, df):
     best_match_code = None
     
     # 1. FIND THE BEST MATCHING ACCESS CODE by searching two columns
-    # We iterate over unique Access Codes and check the score of that code and its associated Setting Item Name
     for access_code in df['Access Code'].unique():
         
         # Get the associated setting name (assuming one setting name per unique Access Code)
-        # Use .iloc[0] to grab the first instance of the Setting Item Name for this code
         setting_name = df[df['Access Code'] == access_code]['Setting item name'].iloc[0]
         
         # Search 1: Fuzzy score against the Access Code
@@ -85,37 +89,34 @@ def find_best_answer(query, df):
             
     # 2. CHECK THRESHOLD
     if best_score < MIN_MATCH_SCORE or best_match_code is None:
-        return (False, None) # No good match found
+        return (False, None)
 
     # 3. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
-    # Filter the DataFrame to get all entries for this specific Access Code
-    matched_df = df[df['Access Code'] == best_match_code].copy() # Using .copy() to avoid SettingWithCopyWarning
+    matched_df = df[df['Access Code'] == best_match_code].copy()
         
-    # Check if we have data to display
     if matched_df.empty:
         return (False, None)
         
-    # Get the common header values (they should be the same across all matched rows)
+    # Get the common header values
     access_code = str(matched_df.iloc[0]['Access Code'])
     setting_item_name = str(matched_df.iloc[0]['Setting item name'])
 
     # 4. FORMAT THE OUTPUT
 
     # --- A. Format the Header Block ---
+    # The format requested: 08 Code: PR-401, Setting Item Name: Print Quality Mode
     header_block = (
         f"**08 Code:**\t`{access_code}`\n\n"
         f"**Setting Item Name:**\t{setting_item_name}\n\n"
     )
 
     # --- B. Prepare the Sub-Table Data ---
-    # Create a new DataFrame containing only the columns for the table
     sub_table_df = matched_df[[
         'Sub Code', 
         'Meaning of sub code', 
         'Description of values'
     ]].copy()
     
-    # Optional: Rename columns for better display in the final table
     sub_table_df.columns = ['Sub Code', 'Meaning', 'Description']
     
     # Convert the sub-table DataFrame to a Markdown table string
@@ -125,7 +126,6 @@ def find_best_answer(query, df):
     formatted_answer = (
         f"### 08 Code Details\n\n"
         f"{header_block}"
-        f"**Best Match Score:** {best_score}%\n\n" # Added for visibility
         f"Here is the detailed breakdown of the available options:\n\n"
         f"{table_markdown}"
     )
