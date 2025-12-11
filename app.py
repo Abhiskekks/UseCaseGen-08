@@ -1,4 +1,4 @@
-# app.py - Updated for Multi-Entry Table Output (Groups rows by Access Code)
+# app.py - Updated for Dual-Field Search (Access Code OR Setting Item Name)
 
 import streamlit as st
 import pandas as pd
@@ -24,9 +24,9 @@ CSV_MATCH_SNIPPETS = [
     "I found a close match! Here is the information you requested:",
     "Certainly! You can find the full mapping details below:",
 ]
-CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code?"
+CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code or setting name?"
 
-# --- NEW REQUIRED COLUMNS ---
+# --- REQUIRED COLUMNS ---
 REQUIRED_COLUMNS = [
     'Access Code',
     'Setting item name',
@@ -56,20 +56,31 @@ def load_data(file_path):
 
 def find_best_answer(query, df):
     """
-    Searches the DataFrame's 'Access Code' column for the best matching query.
-    If a match is found, it retrieves ALL entries for that Access Code 
-    and formats the result as a main title block followed by a sub-table.
+    Searches the DataFrame against both 'Access Code' and 'Setting item name'.
+    If a match is found, it retrieves ALL entries for the best-matched Access Code.
     """
     best_score = 0
     best_match_code = None
     
-    # 1. FIND THE BEST MATCHING ACCESS CODE
+    # 1. FIND THE BEST MATCHING ACCESS CODE by searching two columns
+    # We iterate over unique Access Codes and check the score of that code and its associated Setting Item Name
     for access_code in df['Access Code'].unique():
-        # Use token set ratio for fuzzy matching
-        score = fuzz.token_set_ratio(query.lower(), str(access_code).lower())
+        
+        # Get the associated setting name (assuming one setting name per unique Access Code)
+        # Use .iloc[0] to grab the first instance of the Setting Item Name for this code
+        setting_name = df[df['Access Code'] == access_code]['Setting item name'].iloc[0]
+        
+        # Search 1: Fuzzy score against the Access Code
+        score_code = fuzz.token_set_ratio(query.lower(), str(access_code).lower())
+        
+        # Search 2: Fuzzy score against the Setting Item Name
+        score_name = fuzz.token_set_ratio(query.lower(), str(setting_name).lower())
+        
+        # Take the maximum score from the two searches
+        current_max_score = max(score_code, score_name)
 
-        if score > best_score:
-            best_score = score
+        if current_max_score > best_score:
+            best_score = current_max_score
             best_match_code = access_code
             
     # 2. CHECK THRESHOLD
@@ -78,8 +89,8 @@ def find_best_answer(query, df):
 
     # 3. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
     # Filter the DataFrame to get all entries for this specific Access Code
-    matched_df = df[df['Access Code'] == best_match_code]
-    
+    matched_df = df[df['Access Code'] == best_match_code].copy() # Using .copy() to avoid SettingWithCopyWarning
+        
     # Check if we have data to display
     if matched_df.empty:
         return (False, None)
@@ -108,44 +119,40 @@ def find_best_answer(query, df):
     sub_table_df.columns = ['Sub Code', 'Meaning', 'Description']
     
     # Convert the sub-table DataFrame to a Markdown table string
-    # index=False ensures the DataFrame index isn't included in the table
     table_markdown = sub_table_df.to_markdown(index=False)
 
     # --- C. Combine all parts ---
     formatted_answer = (
         f"### 08 Code Details\n\n"
         f"{header_block}"
+        f"**Best Match Score:** {best_score}%\n\n" # Added for visibility
         f"Here is the detailed breakdown of the available options:\n\n"
         f"{table_markdown}"
     )
 
     return (True, formatted_answer)
 
+# The analyze_prompt_for_multiple_intents function remains unchanged.
 def analyze_prompt_for_multiple_intents(prompt):
     """
     Analyzes the prompt to separate a greeting/small talk from the core query.
-    (This function remains the same as it handles general conversational flow)
     """
     q_lower = prompt.lower().strip()
     detected_greeting = None
 
-    # Check for Greetings at the start
     for greeting in GREETINGS:
         if re.match(r'\b' + re.escape(greeting) + r'\b', q_lower) or q_lower.startswith(greeting):
             detected_greeting = random.choice(GREETING_RESPONSES)
 
-            # Find the end of the greeting + separator
             match_end = q_lower.find(greeting) + len(greeting)
             search_query = q_lower[match_end:].strip()
-            search_query = re.sub(r'^[\s,.:;]+', '', search_query) # Remove leading separators
+            search_query = re.sub(r'^[\s,.:;]+', '', search_query) 
 
-            # If the search query is empty after removing the greeting, use the original prompt
             if not search_query:
-                return detected_greeting, prompt # Let the prompt be searched too, but keep the greeting
+                return detected_greeting, prompt 
 
             return detected_greeting, search_query
 
-    # If no greeting was found, the search query is the original prompt
     return None, prompt
 
 
@@ -157,12 +164,12 @@ data_df = load_data(CSV_FILE_NAME)
 if data_df is not None:
     st.set_page_config(page_title="UseCaseGen-08", layout="centered")
     st.title(" 🚀 UseCaseGen-08 ")
-    st.markdown("Try saying **'Hi, I need the details for 08 code XXX'** or a query related to your 08 code.")
+    st.markdown("Try searching by **08 Code** (e.g., 'PR-401') OR **Setting Item Name** (e.g., 'Print Quality Mode').")
 
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can search my knowledge base for specific 08 Code mappings."})
+        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can search my knowledge base for specific 08 Code mappings by code or setting name."})
 
     # Display chat messages from history
     for message in st.session_state.messages:
@@ -171,42 +178,35 @@ if data_df is not None:
 
     # Accept user input
     if prompt := st.chat_input("Enter the 08 code or a query..."):
-        # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Get the assistant's response
         with st.chat_message("assistant"):
             with st.spinner("Searching and Mapping..."):
-
-                # --- Core Logic: Analyze and Respond ---
+                
                 greeting_response, search_query = analyze_prompt_for_multiple_intents(prompt)
 
                 final_response = ""
 
-                # 1. Start the response with the greeting if one was detected
                 if greeting_response:
                     final_response += greeting_response
 
-                # 2. Perform the search using the cleaned query
                 csv_match_found, csv_answer = find_best_answer(search_query, data_df)
 
                 if csv_match_found:
                     connector = random.choice(CSV_MATCH_SNIPPETS)
-
                     if final_response:
                         final_response += f" {connector}\n\n{csv_answer}"
                     else:
                         final_response += f"{connector}\n\n{csv_answer}"
 
                 else:
-                    # Handle "Not Found" case
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
-                            final_response += " I'm ready to search my knowledge base. What 08 code can I look up for you?"
+                            final_response += " I'm ready to search my knowledge base. What 08 code or setting name can I look up for you?"
                         else:
-                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific 08 Code!"
+                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific 08 Code or Setting Name!"
 
                     elif greeting_response:
                         final_response += f" {CSV_NOT_FOUND_SNIPPET}"
@@ -216,7 +216,6 @@ if data_df is not None:
 
                 st.markdown(final_response)
 
-        # Add assistant message to chat history
         st.session_state.messages.append({"role": "assistant", "content": final_response})
 
     st.sidebar.subheader("Configuration")
