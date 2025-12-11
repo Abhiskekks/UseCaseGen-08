@@ -8,7 +8,7 @@ import re
 
 # --- Configuration ---
 # 1. Specify the name of your CSV file
-CSV_FILE_NAME = 'knowledge_base_new.csv'
+CSV_FILE_NAME = 'knowledge_base.csv'
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
