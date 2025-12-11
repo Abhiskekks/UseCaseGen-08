@@ -1,11 +1,6 @@
-Code08,Use
-08A101,Standard procedure for mandatory security checks before system logon.
-08B202,Designates urgent maintenance tasks related to server redundancy and failover.
-08C303,Documentation code for logging a successful completion of an annual system audit.
-08D404,Indicates a critical failure or outage in the primary data processing pipeline.
-08E505,Standard procedure code for initiating a controlled software deployment process.
-08F606,Code used when scheduling a standard weekly database backup operation.
-08G707,Flag for a non-critical warning regarding high memory usage on a reporting server.
-08H808,Reserved for future expansion of operational procedures.
-08I909,Protocol for escalating an incident to the Tier 3 support team.
-FunctionList,[Panel] - [UserFunctions] - [Admin] - [List] - [Function]
+Access Code,Setting item name,Sub Code,Meaning of sub code,Description of values
+PR-401,Print Quality Mode,00,Standard Resolution,Normal printing mode, optimized for speed.
+PR-401,Print Quality Mode,01,High Resolution,Slows print speed but maximizes detail and sharpness. Recommended for photos.
+SC-905,Scanner Calibration,A1,Daily Checkup,Routine sensor alignment to ensure color accuracy and dimension precision.
+SC-905,Scanner Calibration,B3,Full Recalibration,Deep calibration required after component replacement or major firmware updates.
+NW-620,Network Protocol,T5,TCP/IP,Enables communication over local network and internet. Default setting.
