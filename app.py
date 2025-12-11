@@ -1,4 +1,4 @@
-# app.py - Updated for Ambiguous Match Handling (Lists multiple high-scoring codes if score < 100%)
+# app.py - Updated for Ambiguous Match Handling (Lists multiple high-scoring codes if best score is shared, even if 100%)
 
 import streamlit as st
 import pandas as pd
@@ -78,10 +78,11 @@ def format_ambiguous_output(matched_codes, score):
 def find_best_answer(query, df):
     """
     Searches the DataFrame against 'Access Code' and 'Setting item name'.
-    Handles multiple high-scoring matches if the best score is < 100%.
+    Handles multiple high-scoring matches if the best score is shared, even if it's 100%.
     """
     best_score = 0
-    high_score_matches = [] # List to track ALL codes that achieve the best_score
+    # Dictionary to map score -> list of Access Codes that achieved that score
+    score_to_codes = {} 
     
     # 1. FIND THE BEST MATCHING SCORE AND IDENTIFY ALL CODES THAT ACHIEVE IT
     for access_code in df['Access Code'].unique():
@@ -98,36 +99,33 @@ def find_best_answer(query, df):
         current_max_score = max(score_code, score_name)
 
         if current_max_score > best_score:
-            # If a new high score is found, reset the matches list and update the score
+            # If a new high score is found, reset the scores_to_codes map
             best_score = current_max_score
-            high_score_matches = [access_code]
+            # Store the current best code in the list for the new best score
+            score_to_codes = {best_score: [access_code]}
         elif current_max_score == best_score and current_max_score >= MIN_MATCH_SCORE:
-            # If the current code ties the best score, add it to the matches list
-            high_score_matches.append(access_code)
+            # If the current code ties the best score, add it to the list for that score
+            score_to_codes.setdefault(best_score, []).append(access_code)
             
-    # 2. CHECK THRESHOLD AND AMBIGUITY
-    if best_score < MIN_MATCH_SCORE:
+    # 2. CHECK THRESHOLD
+    if best_score < MIN_MATCH_SCORE or not score_to_codes:
         return (False, None) # No good match found
 
-    # 3. HANDLE SINGLE 100% MATCH (Exact Match)
-    # If the score is 100%, we treat the first match found as the definitive one.
-    if best_score == 100:
-        best_match_code = high_score_matches[0]
+    # Get the list of codes that achieved the best score
+    # We use list(set(...)) to ensure we only have unique Access Codes
+    best_score_codes = list(set(score_to_codes[best_score]))
     
-    # 4. HANDLE AMBIGUOUS MATCHES (Score < 100% and multiple codes share the best score)
-    elif best_score < 100 and len(set(high_score_matches)) > 1:
-        # If score is less than 100% AND more than one unique code achieved that score, 
-        # list all possible options.
-        return format_ambiguous_output(high_score_matches, best_score)
+    # 3. HANDLE AMBIGUOUS MATCHES (Multiple codes share the best score, even if 100%)
+    if len(best_score_codes) > 1:
+        # If multiple unique codes share the best score, list all of them
+        return format_ambiguous_output(best_score_codes, best_score)
         
-    # 5. HANDLE SINGLE BEST MATCH (Score < 100% but only one code achieved it)
-    else: # best_score < 100 AND len(set(high_score_matches)) == 1
-        best_match_code = high_score_matches[0]
+    # 4. HANDLE SINGLE BEST MATCH (Only one code achieved the best score)
+    best_match_code = best_score_codes[0]
         
-
     # --- FROM HERE DOWN, THE CODE PROCESSES THE SINGLE BEST MATCH ---
 
-    # 6. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
+    # 5. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
     matched_df = df[df['Access Code'] == best_match_code].copy()
         
     if matched_df.empty:
@@ -137,7 +135,7 @@ def find_best_answer(query, df):
     access_code = str(matched_df.iloc[0]['Access Code'])
     setting_item_name = str(matched_df.iloc[0]['Setting item name'])
 
-    # 7. FORMAT THE OUTPUT
+    # 6. FORMAT THE OUTPUT
 
     # --- A. Format the Header Block ---
     header_block = (
