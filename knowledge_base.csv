@@ -1,6 +1,6 @@
 Access Code,Setting item name,Sub Code,Meaning of sub code,Description of values
 PR-401,Print Quality Mode,00,Standard Resolution,Normal printing mode, optimized for speed.
-PR-401,Print Quality Mode,01,High Resolution,Slows print speed but maximizes detail and sharpness. Recommended for photos.
+PR-401,Print Quality Mode,01,High Resolution,Slows print speed but maximizes detail and sharpness, Recommended for photos.
 SC-905,Scanner Calibration,A1,Daily Checkup,Routine sensor alignment to ensure color accuracy and dimension precision.
 SC-905,Scanner Calibration,B3,Full Recalibration,Deep calibration required after component replacement or major firmware updates.
 NW-620,Network Protocol,T5,TCP/IP,Enables communication over local network and internet. Default setting.
