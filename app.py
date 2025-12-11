@@ -1,4 +1,4 @@
-# app.py - Updated for Access Code Mapping (Searching by Access Code)
+# app.py - Updated for Access Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT
 
 import streamlit as st
 import pandas as pd
@@ -8,8 +8,7 @@ import re
 
 # --- Configuration ---
 # 1. Specify the name of your CSV file
-# NOTE: The CSV file MUST NOW have columns: Access Code, Setting item name, Sub Code, Meaning of sub code, Description of values
-CSV_FILE_NAME = 'knowledge_base.csv'
+CSV_FILE_NAME = 'knowledge_base_new.csv'
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
@@ -58,7 +57,7 @@ def load_data(file_path):
 def find_best_answer(query, df):
     """
     Searches the DataFrame's 'Access Code' column for the best matching query
-    and returns the corresponding mapped values.
+    and returns the corresponding mapped values in a table format.
     """
     best_score = 0
     best_match_data = {}
@@ -86,21 +85,25 @@ def find_best_answer(query, df):
     if best_score < MIN_MATCH_SCORE:
         return (False, None) # Return False flag and None for no good answer
 
-    # Format the answer using Markdown for clarity
+    # --- UPDATED FORMATTING SECTION: Use Markdown Table ---
+    # The keys in the table are the labels, and the values are the data.
     formatted_answer = (
-        f"### Access Code Mapping\n\n"
-        f"**1. Access Code:** `{best_match_data['Access Code']}`\n"
-        f"**2. Setting Item Name:** {best_match_data['Setting item name']}\n"
-        f"**3. Sub Code:** `{best_match_data['Sub Code']}`\n"
-        f"**4. Meaning of Sub Code:** {best_match_data['Meaning of sub code']}\n"
-        f"**5. Description of Values:**\n{best_match_data['Description of values']}"
+        f"### Access Code Mapping Details\n\n"
+        f"| Item | Value |\n"
+        f"| :--- | :--- |\n"
+        f"| **Access Code** | `{best_match_data['Access Code']}` |\n"
+        f"| **Setting Item Name** | {best_match_data['Setting item name']} |\n"
+        f"| **Sub Code** | `{best_match_data['Sub Code']}` |\n"
+        f"| **Meaning of Sub Code** | {best_match_data['Meaning of sub code']} |\n"
+        f"| **Description of Values** | {best_match_data['Description of values']} |\n"
     )
+    # --------------------------------------------------------
+
     return (True, formatted_answer)
 
 def analyze_prompt_for_multiple_intents(prompt):
     """
     Analyzes the prompt to separate a greeting/small talk from the core query.
-    Returns the detected greeting (or None) and the cleaned-up search query.
     (This function remains the same as it handles general conversational flow)
     """
     q_lower = prompt.lower().strip()
@@ -157,7 +160,7 @@ if data_df is not None:
         with st.chat_message("assistant"):
             with st.spinner("Searching and Mapping..."):
 
-                # --- NEW LOGIC: Analyze and Respond ---
+                # --- Core Logic: Analyze and Respond ---
                 greeting_response, search_query = analyze_prompt_for_multiple_intents(prompt)
 
                 final_response = ""
@@ -173,31 +176,14 @@ if data_df is not None:
                     connector = random.choice(CSV_MATCH_SNIPPETS)
 
                     if final_response:
-                        # e.g., "Hello there! I've checked my knowledge base, and here are the details: ..."
+                        # Combine greeting and table
                         final_response += f" {connector}\n\n{csv_answer}"
                     else:
-                        # e.g., "I've checked my knowledge base, and here are the details: ..." (No greeting)
+                        # Table only
                         final_response += f"{connector}\n\n{csv_answer}"
 
                 else:
                     # Handle "Not Found" case
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
-                            final_response += " I'm ready to search my knowledge base. What Access Code can I look up for you?"
-                        else:
-                            # If it wasn't a greeting and didn't match the CSV, use the general fallback
-                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific Access Code!"
-
-                    elif greeting_response:
-                        final_response += f" {CSV_NOT_FOUND_SNIPPET}"
-
-                    else:
-                        final_response = CSV_NOT_FOUND_SNIPPET
-
-                st.markdown(final_response)
-
-        # Add assistant message to chat history
-        st.session_state.messages.append({"role": "assistant", "content": final_response})
-
-    st.sidebar.subheader("Configuration")
-    st.sidebar.info(f"Using **{CSV_FILE_NAME}** as the knowledge base. \n\nMinimum match score: **{MIN_MATCH_SCORE}%**")
+                            final_response +=
