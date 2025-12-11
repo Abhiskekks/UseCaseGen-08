@@ -1,4 +1,4 @@
-# app.py - Updated for Access Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT (ERROR FIX APPLIED)
+# app.py - Updated for 08 Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT (ERROR FIX APPLIED)
 
 import streamlit as st
 import pandas as pd
@@ -20,11 +20,11 @@ GREETING_RESPONSES = [
     "Hey! Good to chat.",
 ]
 CSV_MATCH_SNIPPETS = [
-    "I've checked my knowledge base, and here are the details for that Access Code:",
+    "I've checked my knowledge base, and here are the details for that 08 Code:",
     "I found a close match! Here is the information you requested:",
     "Certainly! You can find the full mapping details below:",
 ]
-CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that Access Code or query in my knowledge base. Could you try rephrasing or check the exact code?"
+CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code?"
 
 # --- NEW REQUIRED COLUMNS ---
 REQUIRED_COLUMNS = [
@@ -88,7 +88,7 @@ def find_best_answer(query, df):
     # --- UPDATED FORMATTING SECTION: Use Markdown Table ---
     # The keys in the table are the labels, and the values are the data.
     formatted_answer = (
-        f"### Access Code Mapping Details\n\n"
+        f"### 08 code Mapping Details\n\n"
         f"| Item | Value |\n"
         f"| :--- | :--- |\n"
         f"| **Access Code** | `{best_match_data['Access Code']}` |\n"
@@ -137,12 +137,12 @@ data_df = load_data(CSV_FILE_NAME)
 if data_df is not None:
     st.set_page_config(page_title="UseCaseGen-08", layout="centered")
     st.title(" 🚀 UseCaseGen-08 ")
-    st.markdown("Try saying **'Hi, I need the details for access code XXX'** or a query related to your Access Codes.")
+    st.markdown("Try saying **'Hi, I need the details for 08 code XXX'** or a query related to your 08 code.")
 
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can search my knowledge base for specific Access Code mappings."})
+        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can search my knowledge base for specific 08 Code mappings."})
 
     # Display chat messages from history
     for message in st.session_state.messages:
@@ -150,7 +150,7 @@ if data_df is not None:
             st.markdown(message["content"])
 
     # Accept user input
-    if prompt := st.chat_input("Enter the Access Code or a query..."):
+    if prompt := st.chat_input("Enter the 08 code or a query..."):
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -189,9 +189,9 @@ if data_df is not None:
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
                             # Line 188 (approximately): Added the text to the same line as the +=
-                            final_response += " I'm ready to search my knowledge base. What Access Code can I look up for you?"
+                            final_response += " I'm ready to search my knowledge base. What 08 code can I look up for you?"
                         else:
-                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific Access Code!"
+                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific 08 Code!"
 
                     elif greeting_response:
                         final_response += f" {CSV_NOT_FOUND_SNIPPET}"
