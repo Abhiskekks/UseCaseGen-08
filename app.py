@@ -1,15 +1,15 @@
-# app.py - Updated for Combined Intent and Natural Conversation (Searching by Code08)
+# app.py - Updated for Access Code Mapping (Searching by Access Code)
 
 import streamlit as st
 import pandas as pd
 from fuzzywuzzy import fuzz
-import random 
-import re 
+import random
+import re
 
 # --- Configuration ---
 # 1. Specify the name of your CSV file
-# NOTE: The CSV file MUST now have columns: Code08 and Use
-CSV_FILE_NAME = 'knowledge_base.csv' 
+# NOTE: The CSV file MUST NOW have columns: Access Code, Setting item name, Sub Code, Meaning of sub code, Description of values
+CSV_FILE_NAME = 'knowledge_base_new.csv'
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
@@ -21,11 +21,20 @@ GREETING_RESPONSES = [
     "Hey! Good to chat.",
 ]
 CSV_MATCH_SNIPPETS = [
-    "I've checked my knowledge base, and here is the use case:",
-    "I found a close match! Here are the details you requested:",
-    "Certainly! You can find the information below:",
+    "I've checked my knowledge base, and here are the details for that Access Code:",
+    "I found a close match! Here is the information you requested:",
+    "Certainly! You can find the full mapping details below:",
 ]
-CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that query in my knowledge base. Could you try rephrasing or check the exact code?"
+CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that Access Code or query in my knowledge base. Could you try rephrasing or check the exact code?"
+
+# --- NEW REQUIRED COLUMNS ---
+REQUIRED_COLUMNS = [
+    'Access Code',
+    'Setting item name',
+    'Sub Code',
+    'Meaning of sub code',
+    'Description of values'
+]
 
 # --- Core Functions ---
 
@@ -33,9 +42,10 @@ def load_data(file_path):
     """Loads the CSV file into a Pandas DataFrame."""
     try:
         df = pd.read_csv(file_path)
-        # CHECK: Now expecting 'Code08' (for search key) and 'Use' (for answer)
-        if not all(col in df.columns for col in ['Code08', 'Use']):
-            st.error(f"Error: The file '{file_path}' must contain 'Code08' (for searching) and 'Use' (for the description) columns.")
+        # CHECK: Ensure all new required columns are present
+        if not all(col in df.columns for col in REQUIRED_COLUMNS):
+            missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+            st.error(f"Error: The file '{file_path}' is missing required columns: {', '.join(missing_cols)}. Please check the column headers.")
             return None
         return df
     except FileNotFoundError:
@@ -47,36 +57,43 @@ def load_data(file_path):
 
 def find_best_answer(query, df):
     """
-    Searches the DataFrame's 'Code08' column for the best matching query 
-    and returns the corresponding 'Use'.
+    Searches the DataFrame's 'Access Code' column for the best matching query
+    and returns the corresponding mapped values.
     """
     best_score = 0
-    best_answer_use = None
-    best_answer_code08 = None # Storing the matched code for output
-    
+    best_match_data = {}
+
     # Iterate through each row's data
     for index, row in df.iterrows():
-        # Search is now done against the 'Code08' column
-        code_key_08 = str(row['Code08']) 
-        code_use = str(row['Use']) 
-        
+        # Search is now done against the 'Access Code' column
+        access_code_key = str(row['Access Code'])
+
         # Use token set ratio for fuzzy matching
-        score = fuzz.token_set_ratio(query.lower(), code_key_08.lower())
-        
+        score = fuzz.token_set_ratio(query.lower(), access_code_key.lower())
+
         if score > best_score:
             best_score = score
-            best_answer_use = code_use
-            best_answer_code08 = code_key_08 # Store the matched code
-                
+            # Store the data for the best match found so far
+            best_match_data = {
+                'Access Code': access_code_key,
+                'Setting item name': str(row['Setting item name']),
+                'Sub Code': str(row['Sub Code']),
+                'Meaning of sub code': str(row['Meaning of sub code']),
+                'Description of values': str(row['Description of values']),
+            }
+
     # If the best score is below the threshold, return the default "not found" message
     if best_score < MIN_MATCH_SCORE:
         return (False, None) # Return False flag and None for no good answer
-        
-    # Return the answer and a flag indicating it came from the CSV
-    # FORMATTING CHANGE: Changed "Use Case" to "Use"
+
+    # Format the answer using Markdown for clarity
     formatted_answer = (
-        f"**Matching 08th Code:** `{best_answer_code08}`\n\n"
-        f"**Use:**\n{best_answer_use}"
+        f"### Access Code Mapping\n\n"
+        f"**1. Access Code:** `{best_match_data['Access Code']}`\n"
+        f"**2. Setting Item Name:** {best_match_data['Setting item name']}\n"
+        f"**3. Sub Code:** `{best_match_data['Sub Code']}`\n"
+        f"**4. Meaning of Sub Code:** {best_match_data['Meaning of sub code']}\n"
+        f"**5. Description of Values:**\n{best_match_data['Description of values']}"
     )
     return (True, formatted_answer)
 
@@ -84,26 +101,27 @@ def analyze_prompt_for_multiple_intents(prompt):
     """
     Analyzes the prompt to separate a greeting/small talk from the core query.
     Returns the detected greeting (or None) and the cleaned-up search query.
+    (This function remains the same as it handles general conversational flow)
     """
     q_lower = prompt.lower().strip()
     detected_greeting = None
-    
+
     # Check for Greetings at the start
     for greeting in GREETINGS:
         if re.match(r'\b' + re.escape(greeting) + r'\b', q_lower) or q_lower.startswith(greeting):
             detected_greeting = random.choice(GREETING_RESPONSES)
-            
+
             # Find the end of the greeting + separator
             match_end = q_lower.find(greeting) + len(greeting)
             search_query = q_lower[match_end:].strip()
             search_query = re.sub(r'^[\s,.:;]+', '', search_query) # Remove leading separators
-            
+
             # If the search query is empty after removing the greeting, use the original prompt
             if not search_query:
                 return detected_greeting, prompt # Let the prompt be searched too, but keep the greeting
-            
+
             return detected_greeting, search_query
-            
+
     # If no greeting was found, the search query is the original prompt
     return None, prompt
 
@@ -114,14 +132,14 @@ def analyze_prompt_for_multiple_intents(prompt):
 data_df = load_data(CSV_FILE_NAME)
 
 if data_df is not None:
-    st.set_page_config(page_title="General Chatbot", layout="centered")
-    st.title(" UseCaseGen-08 ")
-    st.markdown("Try saying **'Hi, what is the 08th code for ABC'** or a query related to your CSV data.")
+    st.set_page_config(page_title="Access Code Mapper Chatbot", layout="centered")
+    st.title(" 🚀 Access Code Mapper ")
+    st.markdown("Try saying **'Hi, I need the details for access code XXX'** or a query related to your Access Codes.")
 
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can handle simple chat and search my knowledge base."})
+        st.session_state.messages.append({"role": "assistant", "content": "Hello! I can search my knowledge base for specific Access Code mappings."})
 
     # Display chat messages from history
     for message in st.session_state.messages:
@@ -129,7 +147,7 @@ if data_df is not None:
             st.markdown(message["content"])
 
     # Accept user input
-    if prompt := st.chat_input("What is your question?"):
+    if prompt := st.chat_input("Enter the Access Code or a query..."):
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -137,52 +155,47 @@ if data_df is not None:
 
         # Get the assistant's response
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                
+            with st.spinner("Searching and Mapping..."):
+
                 # --- NEW LOGIC: Analyze and Respond ---
                 greeting_response, search_query = analyze_prompt_for_multiple_intents(prompt)
-                
+
                 final_response = ""
-                
+
                 # 1. Start the response with the greeting if one was detected
                 if greeting_response:
-                    final_response += greeting_response 
-                    
+                    final_response += greeting_response
+
                 # 2. Perform the search using the cleaned query
                 csv_match_found, csv_answer = find_best_answer(search_query, data_df)
-                
+
                 if csv_match_found:
                     connector = random.choice(CSV_MATCH_SNIPPETS)
-                    
+
                     if final_response:
-                        # e.g., "Hello there! I've checked my knowledge base, and here is the use case: ..."
+                        # e.g., "Hello there! I've checked my knowledge base, and here are the details: ..."
                         final_response += f" {connector}\n\n{csv_answer}"
                     else:
-                        # e.g., "I've checked my knowledge base, and here is the use case: ..." (No greeting)
+                        # e.g., "I've checked my knowledge base, and here are the details: ..." (No greeting)
                         final_response += f"{connector}\n\n{csv_answer}"
-                
+
                 else:
                     # Handle "Not Found" case
-                    
-                    # If it was JUST a greeting (e.g., input was only "Hi"), add a helpful prompt
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
-                            final_response += " I'm ready to search my knowledge base. What code or use case can I look up for you?"
+                            final_response += " I'm ready to search my knowledge base. What Access Code can I look up for you?"
                         else:
                             # If it wasn't a greeting and didn't match the CSV, use the general fallback
-                            final_response = "I'm a specialized AI. I couldn't find an answer for that general topic. Try asking about a code or use case in my knowledge base!"
-                    
-                    # If it was a combined query that failed (e.g., "Hi, use case for ZZZZZZZZZ")
+                            final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific Access Code!"
+
                     elif greeting_response:
                         final_response += f" {CSV_NOT_FOUND_SNIPPET}"
-                    
-                    # If it was just a failed search query (e.g., "use case for ZZZZZZZZZ")
+
                     else:
                         final_response = CSV_NOT_FOUND_SNIPPET
 
-
                 st.markdown(final_response)
-        
+
         # Add assistant message to chat history
         st.session_state.messages.append({"role": "assistant", "content": final_response})
 
