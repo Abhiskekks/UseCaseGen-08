@@ -1,4 +1,4 @@
-# app.py - Updated for 08 Code Mapping (Searching by Access Code) - NOW WITH TABLE OUTPUT (ERROR FIX APPLIED)
+# app.py - Updated for Multi-Entry Table Output (Groups rows by Access Code)
 
 import streamlit as st
 import pandas as pd
@@ -56,48 +56,68 @@ def load_data(file_path):
 
 def find_best_answer(query, df):
     """
-    Searches the DataFrame's 'Access Code' column for the best matching query
-    and returns the corresponding mapped values in a table format.
+    Searches the DataFrame's 'Access Code' column for the best matching query.
+    If a match is found, it retrieves ALL entries for that Access Code 
+    and formats the result as a main title block followed by a sub-table.
     """
     best_score = 0
-    best_match_data = {}
-
-    # Iterate through each row's data
-    for index, row in df.iterrows():
-        # Search is now done against the 'Access Code' column
-        access_code_key = str(row['Access Code'])
-
+    best_match_code = None
+    
+    # 1. FIND THE BEST MATCHING ACCESS CODE
+    for access_code in df['Access Code'].unique():
         # Use token set ratio for fuzzy matching
-        score = fuzz.token_set_ratio(query.lower(), access_code_key.lower())
+        score = fuzz.token_set_ratio(query.lower(), str(access_code).lower())
 
         if score > best_score:
             best_score = score
-            # Store the data for the best match found so far
-            best_match_data = {
-                'Access Code': access_code_key,
-                'Setting item name': str(row['Setting item name']),
-                'Sub Code': str(row['Sub Code']),
-                'Meaning of sub code': str(row['Meaning of sub code']),
-                'Description of values': str(row['Description of values']),
-            }
+            best_match_code = access_code
+            
+    # 2. CHECK THRESHOLD
+    if best_score < MIN_MATCH_SCORE or best_match_code is None:
+        return (False, None) # No good match found
 
-    # If the best score is below the threshold, return the default "not found" message
-    if best_score < MIN_MATCH_SCORE:
-        return (False, None) # Return False flag and None for no good answer
+    # 3. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
+    # Filter the DataFrame to get all entries for this specific Access Code
+    matched_df = df[df['Access Code'] == best_match_code]
+    
+    # Check if we have data to display
+    if matched_df.empty:
+        return (False, None)
+        
+    # Get the common header values (they should be the same across all matched rows)
+    access_code = str(matched_df.iloc[0]['Access Code'])
+    setting_item_name = str(matched_df.iloc[0]['Setting item name'])
 
-    # --- UPDATED FORMATTING SECTION: Use Markdown Table ---
-    # The keys in the table are the labels, and the values are the data.
-    formatted_answer = (
-        f"### 08 code Details\n\n"
-        f"| Item | Value |\n"
-        f"| :--- | :--- |\n"
-        f"| **08 Code** | `{best_match_data['Access Code']}` |\n"
-        f"| **Setting Item Name** | {best_match_data['Setting item name']} |\n"
-        f"| **Sub Code** | `{best_match_data['Sub Code']}` |\n"
-        f"| **Meaning of Sub Code** | {best_match_data['Meaning of sub code']} |\n"
-        f"| **Description of Values** | {best_match_data['Description of values']} |\n"
+    # 4. FORMAT THE OUTPUT
+
+    # --- A. Format the Header Block ---
+    header_block = (
+        f"**08 Code:**\t`{access_code}`\n\n"
+        f"**Setting Item Name:**\t{setting_item_name}\n\n"
     )
-    # --------------------------------------------------------
+
+    # --- B. Prepare the Sub-Table Data ---
+    # Create a new DataFrame containing only the columns for the table
+    sub_table_df = matched_df[[
+        'Sub Code', 
+        'Meaning of sub code', 
+        'Description of values'
+    ]].copy()
+    
+    # Optional: Rename columns for better display in the final table
+    sub_table_df.columns = ['Sub Code', 'Meaning', 'Description']
+    
+    # Convert the sub-table DataFrame to a Markdown table string
+    # index=False ensures the DataFrame index isn't included in the table
+    table_markdown = sub_table_df.to_markdown(index=False)
+
+    # --- C. Combine all parts ---
+    formatted_answer = (
+        f"### 08 Code Details\n\n"
+        f"{header_block}"
+        f"Here is the detailed breakdown of the available options:\n\n"
+        f"{table_markdown}"
+    )
 
     return (True, formatted_answer)
 
@@ -129,7 +149,7 @@ def analyze_prompt_for_multiple_intents(prompt):
     return None, prompt
 
 
-# --- Streamlit App Interface ---
+# --- Streamlit App Interface (Remains mostly the same) ---
 
 # Load the data once at the start
 data_df = load_data(CSV_FILE_NAME)
@@ -176,19 +196,14 @@ if data_df is not None:
                     connector = random.choice(CSV_MATCH_SNIPPETS)
 
                     if final_response:
-                        # Combine greeting and table
                         final_response += f" {connector}\n\n{csv_answer}"
                     else:
-                        # Table only
                         final_response += f"{connector}\n\n{csv_answer}"
 
                 else:
                     # Handle "Not Found" case
-                    
-                    # If it was JUST a greeting (e.g., input was only "Hi"), add a helpful prompt
                     if not search_query.strip() or search_query == prompt.strip():
                         if greeting_response:
-                            # Line 188 (approximately): Added the text to the same line as the +=
                             final_response += " I'm ready to search my knowledge base. What 08 code can I look up for you?"
                         else:
                             final_response = "I'm a specialized tool. I couldn't find an answer for that general topic. Try asking about a specific 08 Code!"
