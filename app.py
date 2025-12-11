@@ -1,5 +1,4 @@
-# app.py - Updated for Dual-Field Search (Access Code OR Setting Item Name)
-# EXCLUDING 'Description of values' from search and output.
+# app.py - Updated for Ambiguous Match Handling (Lists multiple high-scoring codes if score < 100%)
 
 import streamlit as st
 import pandas as pd
@@ -25,16 +24,18 @@ CSV_MATCH_SNIPPETS = [
     "I found a close match! Here is the information you requested:",
     "Certainly! You can find the full mapping details below:",
 ]
+AMBIGUOUS_MATCH_SNIPPET = (
+    "I found multiple possible matches that score {score}%. "
+    "Please try searching for one of the specific 08 Codes below for the full details:"
+)
 CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code or setting name?"
 
-# --- UPDATED REQUIRED COLUMNS ---
-# 'Description of values' has been removed from this list.
+# --- REQUIRED COLUMNS ---
 REQUIRED_COLUMNS = [
     'Access Code',
     'Setting item name',
     'Sub Code',
     'Meaning of sub code'
-    # 'Description of values' is no longer mandatory for loading
 ]
 
 # --- Core Functions ---
@@ -44,7 +45,6 @@ def load_data(file_path):
     try:
         df = pd.read_excel(file_path)
         
-        # NOTE: We only check for the columns required for the lookup and table structure
         if not all(col in df.columns for col in REQUIRED_COLUMNS):
             missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
             st.error(f"Error: The file '{file_path}' is missing required columns: {', '.join(missing_cols)}. Please check the column headers.")
@@ -58,18 +58,34 @@ def load_data(file_path):
         st.info("Ensure the file structure is correct and necessary libraries (pandas, openpyxl) are installed.")
         return None
 
+def format_ambiguous_output(matched_codes, score):
+    """Formats the output when multiple high-scoring codes are found (score < 100)."""
+    
+    # Remove duplicates and format into a Markdown list
+    code_list = "\n".join([f"* `{code}`" for code in sorted(list(set(matched_codes)))])
+    
+    # Get the introductory snippet and insert the score
+    snippet = AMBIGUOUS_MATCH_SNIPPET.format(score=score)
+    
+    formatted_answer = (
+        f"### Ambiguous Search Result\n\n"
+        f"{snippet}\n\n"
+        f"{code_list}"
+    )
+    return (True, formatted_answer)
+
+
 def find_best_answer(query, df):
     """
-    Searches the DataFrame against 'Access Code' and 'Setting item name' only.
-    Retrieves ALL entries for the best-matched Access Code, excluding 'Description of values'.
+    Searches the DataFrame against 'Access Code' and 'Setting item name'.
+    Handles multiple high-scoring matches if the best score is < 100%.
     """
     best_score = 0
-    best_match_code = None
+    high_score_matches = [] # List to track ALL codes that achieve the best_score
     
-    # 1. FIND THE BEST MATCHING ACCESS CODE by searching two columns
+    # 1. FIND THE BEST MATCHING SCORE AND IDENTIFY ALL CODES THAT ACHIEVE IT
     for access_code in df['Access Code'].unique():
         
-        # Get the associated setting name 
         setting_name = df[df['Access Code'] == access_code]['Setting item name'].iloc[0]
         
         # Search 1: Fuzzy score against the Access Code
@@ -82,14 +98,36 @@ def find_best_answer(query, df):
         current_max_score = max(score_code, score_name)
 
         if current_max_score > best_score:
+            # If a new high score is found, reset the matches list and update the score
             best_score = current_max_score
-            best_match_code = access_code
+            high_score_matches = [access_code]
+        elif current_max_score == best_score and current_max_score >= MIN_MATCH_SCORE:
+            # If the current code ties the best score, add it to the matches list
+            high_score_matches.append(access_code)
             
-    # 2. CHECK THRESHOLD
-    if best_score < MIN_MATCH_SCORE or best_match_code is None:
-        return (False, None)
+    # 2. CHECK THRESHOLD AND AMBIGUITY
+    if best_score < MIN_MATCH_SCORE:
+        return (False, None) # No good match found
 
-    # 3. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
+    # 3. HANDLE SINGLE 100% MATCH (Exact Match)
+    # If the score is 100%, we treat the first match found as the definitive one.
+    if best_score == 100:
+        best_match_code = high_score_matches[0]
+    
+    # 4. HANDLE AMBIGUOUS MATCHES (Score < 100% and multiple codes share the best score)
+    elif best_score < 100 and len(set(high_score_matches)) > 1:
+        # If score is less than 100% AND more than one unique code achieved that score, 
+        # list all possible options.
+        return format_ambiguous_output(high_score_matches, best_score)
+        
+    # 5. HANDLE SINGLE BEST MATCH (Score < 100% but only one code achieved it)
+    else: # best_score < 100 AND len(set(high_score_matches)) == 1
+        best_match_code = high_score_matches[0]
+        
+
+    # --- FROM HERE DOWN, THE CODE PROCESSES THE SINGLE BEST MATCH ---
+
+    # 6. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
     matched_df = df[df['Access Code'] == best_match_code].copy()
         
     if matched_df.empty:
@@ -99,7 +137,7 @@ def find_best_answer(query, df):
     access_code = str(matched_df.iloc[0]['Access Code'])
     setting_item_name = str(matched_df.iloc[0]['Setting item name'])
 
-    # 4. FORMAT THE OUTPUT
+    # 7. FORMAT THE OUTPUT
 
     # --- A. Format the Header Block ---
     header_block = (
@@ -107,14 +145,12 @@ def find_best_answer(query, df):
         f"**Setting Item Name:**\t{setting_item_name}\n\n"
     )
 
-    # --- B. Prepare the Sub-Table Data ---
-    # NOTE: 'Description of values' is excluded here
+    # --- B. Prepare the Sub-Table Data (Excluding Description of values) ---
     sub_table_df = matched_df[[
         'Sub Code', 
         'Meaning of sub code', 
     ]].copy()
     
-    # Update column names for the output table
     sub_table_df.columns = ['Sub Code', 'Meaning'] 
     
     # Convert the sub-table DataFrame to a Markdown table string
@@ -132,9 +168,7 @@ def find_best_answer(query, df):
 
 # The analyze_prompt_for_multiple_intents function remains unchanged.
 def analyze_prompt_for_multiple_intents(prompt):
-    """
-    Analyzes the prompt to separate a greeting/small talk from the core query.
-    """
+    """Analyzes the prompt to separate a greeting/small talk from the core query."""
     q_lower = prompt.lower().strip()
     detected_greeting = None
 
@@ -193,11 +227,16 @@ if data_df is not None:
                 csv_match_found, csv_answer = find_best_answer(search_query, data_df)
 
                 if csv_match_found:
-                    connector = random.choice(CSV_MATCH_SNIPPETS)
-                    if final_response:
+                    # Use a different connector/response if the result is a list of ambiguous codes
+                    if "### Ambiguous Search Result" in csv_answer:
+                        connector = "I need a little more clarity."
                         final_response += f" {connector}\n\n{csv_answer}"
                     else:
-                        final_response += f"{connector}\n\n{csv_answer}"
+                        connector = random.choice(CSV_MATCH_SNIPPETS)
+                        if final_response:
+                            final_response += f" {connector}\n\n{csv_answer}"
+                        else:
+                            final_response += f"{connector}\n\n{csv_answer}"
 
                 else:
                     if not search_query.strip() or search_query == prompt.strip():
