@@ -1,5 +1,5 @@
 # app.py - Updated for Dual-Field Search (Access Code OR Setting Item Name)
-# NOW USING EXCEL (.xlsx or .xls) FILE INPUT and REMOVING BEST MATCH SCORE DISPLAY
+# EXCLUDING 'Description of values' from search and output.
 
 import streamlit as st
 import pandas as pd
@@ -8,8 +8,8 @@ import random
 import re
 
 # --- Configuration ---
-# 1. Specify the name of your EXCEL file (Make sure your file is now an Excel file, e.g., knowledge_base.xlsx)
-CSV_FILE_NAME = 'knowledge_base.xlsx' # Changed expected file extension for clarity/best practice
+# 1. Specify the name of your EXCEL file 
+CSV_FILE_NAME = 'knowledge_base.xlsx' 
 # 2. Set the minimum score for a "good" match (0 to 100)
 MIN_MATCH_SCORE = 75
 
@@ -27,13 +27,14 @@ CSV_MATCH_SNIPPETS = [
 ]
 CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code or setting name?"
 
-# --- REQUIRED COLUMNS ---
+# --- UPDATED REQUIRED COLUMNS ---
+# 'Description of values' has been removed from this list.
 REQUIRED_COLUMNS = [
     'Access Code',
     'Setting item name',
     'Sub Code',
-    'Meaning of sub code',
-    'Description of values'
+    'Meaning of sub code'
+    # 'Description of values' is no longer mandatory for loading
 ]
 
 # --- Core Functions ---
@@ -41,12 +42,9 @@ REQUIRED_COLUMNS = [
 def load_data(file_path):
     """Loads the Excel file into a Pandas DataFrame."""
     try:
-        # --- MAJOR CHANGE HERE: Using pd.read_excel() ---
-        # Assuming the data is in the first sheet (sheet_name=0 is default)
         df = pd.read_excel(file_path)
-        # ------------------------------------------------
         
-        # CHECK: Ensure all new required columns are present
+        # NOTE: We only check for the columns required for the lookup and table structure
         if not all(col in df.columns for col in REQUIRED_COLUMNS):
             missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
             st.error(f"Error: The file '{file_path}' is missing required columns: {', '.join(missing_cols)}. Please check the column headers.")
@@ -57,13 +55,13 @@ def load_data(file_path):
         return None
     except Exception as e:
         st.error(f"An error occurred while loading the Excel file: {e}")
-        st.info("Make sure you have the 'openpyxl' or 'xlrd' library installed if you encounter an error here. You may need to add it to requirements.txt.")
+        st.info("Ensure the file structure is correct and necessary libraries (pandas, openpyxl) are installed.")
         return None
 
 def find_best_answer(query, df):
     """
-    Searches the DataFrame against both 'Access Code' and 'Setting item name'.
-    If a match is found, it retrieves ALL entries for the best-matched Access Code.
+    Searches the DataFrame against 'Access Code' and 'Setting item name' only.
+    Retrieves ALL entries for the best-matched Access Code, excluding 'Description of values'.
     """
     best_score = 0
     best_match_code = None
@@ -71,7 +69,7 @@ def find_best_answer(query, df):
     # 1. FIND THE BEST MATCHING ACCESS CODE by searching two columns
     for access_code in df['Access Code'].unique():
         
-        # Get the associated setting name (assuming one setting name per unique Access Code)
+        # Get the associated setting name 
         setting_name = df[df['Access Code'] == access_code]['Setting item name'].iloc[0]
         
         # Search 1: Fuzzy score against the Access Code
@@ -104,20 +102,20 @@ def find_best_answer(query, df):
     # 4. FORMAT THE OUTPUT
 
     # --- A. Format the Header Block ---
-    # The format requested: 08 Code: PR-401, Setting Item Name: Print Quality Mode
     header_block = (
         f"**08 Code:**\t`{access_code}`\n\n"
         f"**Setting Item Name:**\t{setting_item_name}\n\n"
     )
 
     # --- B. Prepare the Sub-Table Data ---
+    # NOTE: 'Description of values' is excluded here
     sub_table_df = matched_df[[
         'Sub Code', 
         'Meaning of sub code', 
-        'Description of values'
     ]].copy()
     
-    sub_table_df.columns = ['Sub Code', 'Meaning', 'Description']
+    # Update column names for the output table
+    sub_table_df.columns = ['Sub Code', 'Meaning'] 
     
     # Convert the sub-table DataFrame to a Markdown table string
     table_markdown = sub_table_df.to_markdown(index=False)
