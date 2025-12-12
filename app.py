@@ -1,4 +1,4 @@
-# app.py - Updated for Ambiguous Match Handling (Lists multiple high-scoring codes if best score is shared, even if 100%)
+# app.py - FINAL AND CORRECTED CODE: Contextual Handling for Ambiguous "Show All" and NameError fix
 
 import streamlit as st
 import pandas as pd
@@ -28,6 +28,9 @@ AMBIGUOUS_MATCH_SNIPPET = (
     "I found multiple possible matches that score {score}%. "
     "Please try searching for one of the specific 08 Codes below for the full details:"
 )
+AMBIGUOUS_SHOW_ALL_SNIPPET = (
+    "Displaying details for all the highly-matched 08 Codes below:"
+)
 CSV_NOT_FOUND_SNIPPET = "I couldn't find a close match for that 08 Code or query in my knowledge base. Could you try rephrasing or check the exact code or setting name?"
 
 # --- REQUIRED COLUMNS ---
@@ -37,6 +40,13 @@ REQUIRED_COLUMNS = [
     'Sub Code',
     'Meaning of sub code'
 ]
+
+# --- Helper Patterns ---
+# Regex pattern to detect a "Show All" command
+SHOW_ALL_PATTERN = r'\b(show all|all options|give all|all of them)\b'
+# Regex pattern to extract codes from the Ambiguous Search Result block
+CODE_EXTRACTION_PATTERN = r'\* `([A-Z0-9-]+)`'
+
 
 # --- Core Functions ---
 
@@ -55,11 +65,44 @@ def load_data(file_path):
         return None
     except Exception as e:
         st.error(f"An error occurred while loading the Excel file: {e}")
-        st.info("Ensure the file structure is correct and necessary libraries (pandas, openpyxl) are installed.")
+        st.info("Ensure the file structure is correct and necessary libraries (pandas, openpyxl) and tabulate are installed.")
         return None
 
+def format_single_code_details(access_code, matched_df):
+    """Formats the detailed output for a single, known Access Code."""
+    
+    # Get the common header values
+    setting_item_name = str(matched_df.iloc[0]['Setting item name'])
+
+    # --- A. Format the Header Block ---
+    header_block = (
+        f"**08 Code:**\t`{access_code}`\n\n"
+        f"**Setting Item Name:**\t{setting_item_name}\n\n"
+    )
+
+    # --- B. Prepare the Sub-Table Data ---
+    sub_table_df = matched_df[[
+        'Sub Code', 
+        'Meaning of sub code', 
+    ]].copy()
+    
+    sub_table_df.columns = ['Sub Code', 'Meaning'] 
+    
+    # Convert the sub-table DataFrame to a Markdown table string (Requires 'tabulate')
+    table_markdown = sub_table_df.to_markdown(index=False)
+
+    # --- C. Combine all parts ---
+    formatted_answer = (
+        f"### Details for Code: `{access_code}`\n\n"
+        f"{header_block}"
+        f"Available options:\n\n"
+        f"{table_markdown}\n\n" # Added extra newline for separation
+        f"---" # Separator for multiple codes
+    )
+    return formatted_answer
+
 def format_ambiguous_output(matched_codes, score):
-    """Formats the output when multiple high-scoring codes are found (score < 100)."""
+    """Formats the output when multiple high-scoring codes are found (asking for clarification)."""
     
     # Remove duplicates and format into a Markdown list
     code_list = "\n".join([f"* `{code}`" for code in sorted(list(set(matched_codes)))])
@@ -78,10 +121,9 @@ def format_ambiguous_output(matched_codes, score):
 def find_best_answer(query, df):
     """
     Searches the DataFrame against 'Access Code' and 'Setting item name'.
-    Handles multiple high-scoring matches if the best score is shared, even if it's 100%.
+    Lists all codes that achieve the best score, regardless of whether that score is 100%.
     """
     best_score = 0
-    # Dictionary to map score -> list of Access Codes that achieved that score
     score_to_codes = {} 
     
     # 1. FIND THE BEST MATCHING SCORE AND IDENTIFY ALL CODES THAT ACHIEVE IT
@@ -99,12 +141,9 @@ def find_best_answer(query, df):
         current_max_score = max(score_code, score_name)
 
         if current_max_score > best_score:
-            # If a new high score is found, reset the scores_to_codes map
             best_score = current_max_score
-            # Store the current best code in the list for the new best score
             score_to_codes = {best_score: [access_code]}
         elif current_max_score == best_score and current_max_score >= MIN_MATCH_SCORE:
-            # If the current code ties the best score, add it to the list for that score
             score_to_codes.setdefault(best_score, []).append(access_code)
             
     # 2. CHECK THRESHOLD
@@ -112,57 +151,25 @@ def find_best_answer(query, df):
         return (False, None) # No good match found
 
     # Get the list of codes that achieved the best score
-    # We use list(set(...)) to ensure we only have unique Access Codes
     best_score_codes = list(set(score_to_codes[best_score]))
     
-    # 3. HANDLE AMBIGUOUS MATCHES (Multiple codes share the best score, even if 100%)
+    # 3. AMBIGUITY CHECK: If multiple unique codes share the best score, ask for clarification.
     if len(best_score_codes) > 1:
-        # If multiple unique codes share the best score, list all of them
         return format_ambiguous_output(best_score_codes, best_score)
         
-    # 4. HANDLE SINGLE BEST MATCH (Only one code achieved the best score)
+    # 4. HANDLE SINGLE BEST MATCH
     best_match_code = best_score_codes[0]
         
-    # --- FROM HERE DOWN, THE CODE PROCESSES THE SINGLE BEST MATCH ---
-
-    # 5. RETRIEVE ALL ROWS FOR THE BEST MATCHED CODE
+    # 5. RETRIEVE ALL ROWS AND FORMAT DETAILS FOR THE SINGLE CODE
     matched_df = df[df['Access Code'] == best_match_code].copy()
         
     if matched_df.empty:
         return (False, None)
-        
-    # Get the common header values
-    access_code = str(matched_df.iloc[0]['Access Code'])
-    setting_item_name = str(matched_df.iloc[0]['Setting item name'])
 
-    # 6. FORMAT THE OUTPUT
-
-    # --- A. Format the Header Block ---
-    header_block = (
-        f"**08 Code:**\t`{access_code}`\n\n"
-        f"**Setting Item Name:**\t{setting_item_name}\n\n"
-    )
-
-    # --- B. Prepare the Sub-Table Data (Excluding Description of values) ---
-    sub_table_df = matched_df[[
-        'Sub Code', 
-        'Meaning of sub code', 
-    ]].copy()
+    formatted_answer = format_single_code_details(best_match_code, matched_df)
     
-    sub_table_df.columns = ['Sub Code', 'Meaning'] 
-    
-    # Convert the sub-table DataFrame to a Markdown table string
-    table_markdown = sub_table_df.to_markdown(index=False)
-
-    # --- C. Combine all parts ---
-    formatted_answer = (
-        f"### 08 Code Details\n\n"
-        f"{header_block}"
-        f"Here is the detailed breakdown of the available options:\n\n"
-        f"{table_markdown}"
-    )
-
     return (True, formatted_answer)
+
 
 # The analyze_prompt_for_multiple_intents function remains unchanged.
 def analyze_prompt_for_multiple_intents(prompt):
@@ -186,7 +193,7 @@ def analyze_prompt_for_multiple_intents(prompt):
     return None, prompt
 
 
-# --- Streamlit App Interface (Remains mostly the same) ---
+# --- Streamlit App Interface (Contains new logic for "Show All" and fix for NameError) ---
 
 # Load the data once at the start
 data_df = load_data(CSV_FILE_NAME)
@@ -209,6 +216,7 @@ if data_df is not None:
     # Accept user input
     if prompt := st.chat_input("Enter the 08 code or a query..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
+        
         with st.chat_message("user"):
             st.markdown(prompt)
 
@@ -216,25 +224,69 @@ if data_df is not None:
             with st.spinner("Searching and Mapping..."):
                 
                 greeting_response, search_query = analyze_prompt_for_multiple_intents(prompt)
-
                 final_response = ""
+                
+                # Initialize variables to avoid NameError
+                csv_answer = ""
+                csv_match_found = False
 
                 if greeting_response:
                     final_response += greeting_response
+                
+                # --- CONTEXTUAL LOGIC ---
+                is_show_all_command = re.search(SHOW_ALL_PATTERN, search_query.lower())
+                
+                # Check if the previous message was an Ambiguous Search Result
+                if st.session_state.messages and len(st.session_state.messages) >= 2:
+                    last_assistant_message = st.session_state.messages[-2]['content']
 
-                csv_match_found, csv_answer = find_best_answer(search_query, data_df)
-
-                if csv_match_found:
-                    # Use a different connector/response if the result is a list of ambiguous codes
-                    if "### Ambiguous Search Result" in csv_answer:
-                        connector = "I need a little more clarity."
-                        final_response += f" {connector}\n\n{csv_answer}"
-                    else:
-                        connector = random.choice(CSV_MATCH_SNIPPETS)
-                        if final_response:
-                            final_response += f" {connector}\n\n{csv_answer}"
+                    if is_show_all_command and "### Ambiguous Search Result" in last_assistant_message:
+                        
+                        matched_codes = re.findall(CODE_EXTRACTION_PATTERN, last_assistant_message)
+                        
+                        if matched_codes:
+                            # 1. Start response
+                            final_response += f" {AMBIGUOUS_SHOW_ALL_SNIPPET}\n\n"
+                            
+                            # 2. Process and combine details for all extracted codes
+                            combined_details = ""
+                            for code in matched_codes:
+                                matched_df = data_df[data_df['Access Code'] == code].copy()
+                                if not matched_df.empty:
+                                    combined_details += format_single_code_details(code, matched_df)
+                            
+                            final_response += combined_details
+                            csv_match_found = True
+                            # Use a specific flag value for csv_answer to indicate handling was done
+                            csv_answer = "SHOW_ALL_HANDLED" 
                         else:
-                            final_response += f"{connector}\n\n{csv_answer}"
+                            final_response = "I couldn't identify the codes from the previous context. Please try searching for a single code name."
+                            csv_match_found = False
+                    
+                    else: # Not a "Show All" command or no previous ambiguous result
+                        csv_match_found, csv_answer = find_best_answer(search_query, data_df)
+                
+                else: # Fresh chat or only one previous message
+                    csv_match_found, csv_answer = find_best_answer(search_query, data_df)
+                # --- END CONTEXTUAL LOGIC ---
+                
+                # --- FORMATTING OUTPUT ---
+                if csv_match_found:
+                    # Check if the result came from the standard find_best_answer call
+                    if csv_answer != "SHOW_ALL_HANDLED":
+                        
+                        if "### Ambiguous Search Result" in csv_answer:
+                            connector = "I need a little more clarity."
+                            final_response += f" {connector}\n\n{csv_answer}"
+                        
+                        elif "### Details for Code:" in csv_answer:
+                            # This is a single, non-ambiguous match result
+                            connector = random.choice(CSV_MATCH_SNIPPETS)
+                            if final_response:
+                                final_response += f" {connector}\n\n{csv_answer}"
+                            else:
+                                final_response += f"{connector}\n\n{csv_answer}"
+                    # If csv_answer == "SHOW_ALL_HANDLED", final_response is already complete.
 
                 else:
                     if not search_query.strip() or search_query == prompt.strip():
